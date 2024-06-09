@@ -31,6 +31,7 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
     const userCollection = client.db("mediConnectionDB").collection("users");
+    const medicineCollection = client.db("mediConnectionDB").collection("medicine");
 
      // jwt related api
      app.post('/jwt', async (req, res) => {
@@ -56,13 +57,23 @@ async function run() {
         })
       }
   
-       // use verify admin after verifyToken
+       
        const verifyAdmin = async (req, res, next) => {
         const email = req.decoded.email;
         const query = { email: email };
         const user = await userCollection.findOne(query);
         const isAdmin = user?.role === 'admin';
         if (!isAdmin) {
+          return res.status(403).send({ message: 'forbidden access' });
+        }
+        next();
+      }
+       const verifySeller = async (req, res, next) => {
+        const email = req.decoded.email;
+        const query = { email: email };
+        const user = await userCollection.findOne(query);
+        const isSeller = user?.role === 'seller';
+        if (!isSeller) {
           return res.status(403).send({ message: 'forbidden access' });
         }
         next();
@@ -101,6 +112,28 @@ async function run() {
         }
         res.send({ seller });
       })
+
+      // medicine related api
+      app.post('/medicine', verifyToken, verifySeller, async (req, res) => {
+        const medicine = req.body;
+        const result = await medicineCollection.insertOne(medicine);
+        res.send(result);
+      });
+
+      
+    app.get('/medicines', async(req, res) =>{
+      const result = await medicineCollection.find().toArray();
+      res.send(result);
+  })
+
+  app.get('/medicines/:email', verifyToken, verifySeller, async (req, res)=>{
+    const email = req.params.email;
+    const query = {sellerEmail: email}
+    const result = await medicineCollection.find(query).toArray();
+    res.send(result)
+  })
+
+
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
