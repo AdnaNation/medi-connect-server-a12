@@ -1,4 +1,4 @@
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const express = require('express')
 const app = express()
 require('dotenv').config()
@@ -32,6 +32,7 @@ async function run() {
     // await client.connect();
     const userCollection = client.db("mediConnectionDB").collection("users");
     const medicineCollection = client.db("mediConnectionDB").collection("medicine");
+    const cartCollection = client.db("mediConnectionDB").collection("carts");
 
      // jwt related api
      app.post('/jwt', async (req, res) => {
@@ -121,7 +122,7 @@ async function run() {
       });
 
       
-    app.get('/medicines', async(req, res) =>{
+    app.get('/medicines',verifyToken, async(req, res) =>{
       const result = await medicineCollection.find().toArray();
       res.send(result);
   })
@@ -132,6 +133,34 @@ async function run() {
     const result = await medicineCollection.find(query).toArray();
     res.send(result)
   })
+
+  app.get('/medicine/:id', verifyToken, async (req,res)=>{
+    const id = req.params.id;
+    const query= {_id : new ObjectId(id)}
+    const result = await medicineCollection.findOne(query);
+    res.send(result)
+  })
+
+  app.get('/medicineCategory/:category',verifyToken,  async(req, res)=>{
+    const category = req.params.category;
+    const filter = {category: category};
+    const result = await medicineCollection.find(filter).toArray();
+    res.send(result);
+  })
+
+  // cart related api
+     app.post('/carts', async (req, res) => {
+          const cartItem = req.body;
+          const result = await cartCollection.insertOne(cartItem);
+          res.send(result);
+        });
+
+          app.get('/carts', async (req, res) => {
+           const email = req.query.email;
+           const query = { email: email };
+          const result = await cartCollection.find(query).toArray();
+          res.send(result);
+        });
 
 
     // Send a ping to confirm a successful connection
