@@ -155,12 +155,37 @@ async function run() {
           res.send(result);
         });
 
-          app.get('/carts', async (req, res) => {
+          app.get('/carts', verifyToken, async (req, res) => {
            const email = req.query.email;
            const query = { email: email };
           const result = await cartCollection.find(query).toArray();
           res.send(result);
         });
+
+        app.patch('/carts/:id', async (req, res)=>{
+          const id = req.params.id;
+          const filter = {_id: new ObjectId(id)}
+          const updatedDoc ={
+            $inc:{
+              quantity: 1
+            }
+          }
+          const result = await cartCollection.updateOne(filter, updatedDoc)
+          res.send(result)
+
+        })
+        app.patch('/cart/:medicineId', async (req, res)=>{
+          const medicineId = req.params.medicineId;
+          const filter = {medicineId: medicineId}
+          const updatedDoc ={
+            $inc:{
+              quantity: -1
+            }
+          }
+          const result = await cartCollection.updateOne(filter, updatedDoc)
+          res.send(result)
+
+        })
 
 
     // Send a ping to confirm a successful connection
