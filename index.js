@@ -155,8 +155,14 @@ async function run() {
           res.send(result);
         });
 
-          app.get('/carts', verifyToken, async (req, res) => {
-           const email = req.query.email;
+        app.get('/carts', async(req, res)=>{
+          const result = await cartCollection.find().toArray();
+        res.send(result);
+        })
+
+          app.get('/carts/:email', async (req, res) => {
+            const email = req.params.email;
+            // console.log(email);
            const query = { email: email };
           const result = await cartCollection.find(query).toArray();
           res.send(result);
@@ -174,9 +180,14 @@ async function run() {
           res.send(result)
 
         })
-        app.patch('/cart/:medicineId', async (req, res)=>{
-          const medicineId = req.params.medicineId;
-          const filter = {medicineId: medicineId}
+        app.patch('/myCart/:id', verifyToken, async (req, res)=>{
+          const id = req.params.id;
+          console.log(id);
+          const filter = {_id: new ObjectId(id)}
+          const item = await cartCollection.findOne(filter);
+          if (item.quantity <= 0) {
+            return 
+          }
           const updatedDoc ={
             $inc:{
               quantity: -1
@@ -185,6 +196,20 @@ async function run() {
           const result = await cartCollection.updateOne(filter, updatedDoc)
           res.send(result)
 
+        })
+
+        app.delete('/carts/:id', async (req, res) => {
+          const id = req.params.id;
+          const query = { _id: new ObjectId(id) }
+          const result = await cartCollection.deleteOne(query);
+          res.send(result);
+        })
+        app.delete('/cart/:email', async (req, res) => {
+          const email = req.params.email;
+          console.log(email);
+          const query = { email: email }
+          const result = await cartCollection.deleteMany(query);
+          res.send(result);
         })
 
 
