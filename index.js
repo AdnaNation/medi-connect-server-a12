@@ -131,6 +131,9 @@ async function run() {
 
   app.get('/medicines/:email', verifyToken, verifySeller, async (req, res)=>{
     const email = req.params.email;
+    if (req.params.email !== req.decoded.email) {
+      return res.status(403).send({ message: 'forbidden access' });
+    }
     const query = {sellerEmail: email}
     const result = await medicineCollection.find(query).toArray();
     res.send(result)
@@ -162,8 +165,11 @@ async function run() {
         res.send(result);
         })
 
-          app.get('/carts/:email', async (req, res) => {
+          app.get('/carts/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
+            if (req.params.email !== req.decoded.email) {
+              return res.status(403).send({ message: 'forbidden access' });
+            }
             // console.log(email);
            const query = { email: email };
           const result = await cartCollection.find(query).toArray();
@@ -187,7 +193,7 @@ async function run() {
           console.log(id);
           const filter = {_id: new ObjectId(id)}
           const item = await cartCollection.findOne(filter);
-          if (item.quantity <= 0) {
+          if (item.quantity <= 1) {
             return 
           }
           const updatedDoc ={
@@ -208,7 +214,7 @@ async function run() {
         })
         app.delete('/cart/:email', async (req, res) => {
           const email = req.params.email;
-          console.log(email);
+          // console.log(email);
           const query = { email: email }
           const result = await cartCollection.deleteMany(query);
           res.send(result);
@@ -245,6 +251,49 @@ async function run() {
           const deleteResult = await cartCollection.deleteMany(query);
     
           res.send({ paymentResult, deleteResult });
+        })
+
+        app.get('/payments/:email', verifyToken, async (req, res) => {
+          const query = { email: req.params.email }
+          if (req.params.email !== req.decoded.email) {
+            return res.status(403).send({ message: 'forbidden access' });
+          }
+          const result = await paymentCollection.find(query).toArray();
+          res.send(result);
+        })
+
+
+        // seller-stats
+        app.get("/seller-stats", async (req, res)=>{
+          const orders = await paymentCollection.estimatedDocumentCount()
+          res.send({orders})
+        })
+
+        app.get("/order-stats", async (req, res)=>{
+          const result = await paymentCollection.aggregate([
+                    {
+                      $unwind: '$medicineIds'
+                    },
+                    {
+                      $addFields: {
+                        medicineIds: { $toObjectId: "$medicineIds"},
+                      }
+                    },
+                    {
+                      $lookup: {
+                        from: 'medicine',
+                        localField: 'medicineIds',
+                        foreignField: '_id',
+                        as: 'medicines'
+                      }
+                    },
+                    {
+                      $unwind: '$medicines'
+                    },
+                    
+                   
+          ]).toArray()
+          res.send(result)
         })
 
 
