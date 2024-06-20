@@ -240,13 +240,10 @@ async function run() {
 
         app.post('/payments', async (req, res) => {
           const payment = req.body;
+          console.log(payment);
           const paymentResult = await paymentCollection.insertOne(payment);
-          // console.log('payment info', payment);
-          const query = {
-            _id: {
-              $in: payment.cartIds.map(id => new ObjectId(id))
-            }
-          };
+         
+          const query = {email: payment.email}
     
           const deleteResult = await cartCollection.deleteMany(query);
     
@@ -264,9 +261,16 @@ async function run() {
 
 
         // seller-stats
-        app.get("/seller-stats", async (req, res)=>{
-          const orders = await paymentCollection.estimatedDocumentCount()
-          res.send({orders})
+        app.get("/seller-stats/:email", verifyToken, verifySeller, async (req, res)=>{
+          const sellerEmail = req.params.email;
+         
+          const result = await paymentCollection.find().toArray()
+
+          const filteredData =  result.map(order =>({
+            ...order,
+            cart: order.cart.filter(item => item.sellerEmail === sellerEmail)
+          })).filter(order => order.cart.length > 0);
+          res.send(filteredData)
         })
 
         app.get("/order-stats", async (req, res)=>{
