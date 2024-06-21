@@ -273,6 +273,58 @@ async function run() {
           res.send(filteredData)
         })
 
+        app.get("/seller-total-stats/:email",verifyToken, verifySeller, async (req, res)=>{
+          const email = req.params.email;
+
+          const calculateTotalAmount = [
+            { $unwind: '$cart' },
+            { $match: { 'cart.sellerEmail': email } },
+            {
+              $group: {
+                _id: null,
+                totalAmount: {
+                  $sum: {
+                    $multiply: [
+                      '$cart.unitPrice',
+                      '$cart.quantity',
+                      { $subtract: [1, { $divide: ['$cart.discount', 100] }] }
+                    ]
+                  }
+                }
+              }
+            }
+          ];
+
+          const pipeline1 = [
+            { $unwind: '$cart' },
+            { $match: { 'cart.sellerEmail': email, status: 'pending' } },
+            ...calculateTotalAmount
+          ];
+      
+          const pipeline2 = [
+            { $unwind: '$cart' },
+            { $match: { 'cart.sellerEmail': email, status: 'paid' } },
+            ...calculateTotalAmount
+          ];
+
+          const pipeline3 = [
+            { $unwind: '$cart' },
+            { $match: { 'cart.sellerEmail': email } },
+            ...calculateTotalAmount
+          ];
+
+          const pipeline1Result = await paymentCollection.aggregate(pipeline1).toArray();
+          const pipeline2Result = await paymentCollection.aggregate(pipeline2).toArray();
+          const pipeline3Result = await paymentCollection.aggregate(pipeline3).toArray();
+
+          const pendingAmount = pipeline1Result.length > 0 ? pipeline1Result[0].totalAmount : 0;
+          const paidAmount = pipeline2Result.length > 0 ? pipeline2Result[0].totalAmount : 0;
+          const totalAmount = pipeline3Result.length > 0 ? pipeline3Result[0].totalAmount : 0;
+          res.send({totalAmount, paidAmount, pendingAmount})
+
+
+        })
+
         app.get("/order-stats", async (req, res)=>{
           const result = await paymentCollection.aggregate([
                     {
