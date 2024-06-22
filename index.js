@@ -9,7 +9,7 @@ const port = process.env.PORT || 5000;
 
 // middleware
 const corsOptions = {
-    origin: ['http://localhost:5173'],
+    origin: ['http://localhost:5173', 'https://medi-connect-be18c.web.app'],
     credentials: true,
     optionSuccessStatus: 200,
   }
@@ -36,6 +36,8 @@ async function run() {
     const cartCollection = client.db("mediConnectionDB").collection("carts");
     const paymentCollection = client.db("mediConnectionDB").collection("payments");
     const advertiseCollection = client.db("mediConnectionDB").collection("advertise");
+    const sliderCollection = client.db("mediConnectionDB").collection("slider");
+    const categoryCollection = client.db("mediConnectionDB").collection("category");
 
      // jwt related api
      app.post('/jwt', async (req, res) => {
@@ -154,7 +156,7 @@ async function run() {
       });
 
       
-    app.get('/medicines',verifyToken, async(req, res) =>{
+    app.get('/medicines', async(req, res) =>{
       const result = await medicineCollection.find().toArray();
       res.send(result);
   })
@@ -183,6 +185,26 @@ async function run() {
     res.send(result);
   })
 
+  // category
+  app.post('/category', async (req, res)=>{
+  const category = req.body;
+  const result = await categoryCollection.insertOne(category);
+      res.send(result);
+  })
+
+  app.get("/categories", async (req, res) => {
+    const result = await categoryCollection.find().toArray();
+    res.send(result);
+  });
+
+  app.delete("/category/:id",verifyToken,verifyAdmin, async (req, res) => {
+    const query = { _id: new ObjectId(req.params.id) };
+    const result = await categoryCollection.deleteOne(query);
+    res.send(result);
+  });
+
+
+
   // ask for advertise
 
   app.post('/advertise', verifyToken, verifySeller, async (req, res) => {
@@ -194,6 +216,50 @@ async function run() {
         }
     const result = await advertiseCollection.insertOne(medicine);
     res.send(result);
+  });
+
+  app.get('/advertises', verifyToken, verifyAdmin, async (req, res)=>{
+    const result = await advertiseCollection.find().toArray();
+    res.send(result)
+  })
+
+  // slider
+  app.get('/slider', async (req, res)=>{
+    const result = await sliderCollection.find().toArray()
+    res.send(result)
+  })
+  app.post('/slider', verifyToken, verifyAdmin, async (req, res) => {
+    const slider = req.body;
+    console.log(slider);
+    const query = { medicineName: slider.medicineName }
+        const existingMedicine = await sliderCollection.findOne(query);
+        if (existingMedicine) {
+          return res.send({ message: 'slide already exists', insertedId: null })
+        }
+    const result = await sliderCollection.insertOne(slider);
+
+    const updatedDoc ={
+      $set: {
+        isAdvertised: true
+      }
+    }
+    const updatedResult = await advertiseCollection.updateOne(query, updatedDoc)
+    res.send({result, updatedResult});
+  });
+  app.delete('/slider/:medicineName', verifyToken, verifyAdmin, async (req, res) => {
+    const name = req.params.medicineName;
+    console.log(name);
+    const query = { medicineName: name }
+      
+    const result = await sliderCollection.deleteOne(query);
+
+    const updatedDoc ={
+      $set: {
+        isAdvertised: false
+      }
+    }
+    const updatedResult = await advertiseCollection.updateOne(query, updatedDoc)
+    res.send({result, updatedResult});
   });
 
   // cart related api
@@ -292,6 +358,25 @@ async function run() {
           res.send({ paymentResult, deleteResult });
         })
 
+        app.get('/payments', verifyToken, verifyAdmin, async (req,res)=>{
+           const result = await paymentCollection.find().toArray();
+           res.send(result)
+        })
+
+        app.patch('/payment',  async (req, res)=>{
+        
+          const payment = req.body;
+          console.log(payment);
+          const query = {_id: new ObjectId(payment._id)}
+          const updatedDoc = {
+            $set:{
+              status: "paid"
+            },
+          }
+          const result = await paymentCollection.updateOne(query, updatedDoc)
+          res.send(result)
+        })
+
         app.get('/payments/:email', verifyToken, async (req, res) => {
           const query = { email: req.params.email }
           if (req.params.email !== req.decoded.email) {
@@ -314,6 +399,49 @@ async function run() {
           })).filter(order => order.cart.length > 0);
           res.send(filteredData)
         })
+
+        app.get("/admin-total-statistics", verifyToken, verifyAdmin, async (req, res) => {
+          const pipeline1 = [
+            { $match: { status: "pending" } },
+            {
+              $group: {
+                _id: null,
+                totalAmount: { $sum: "$price" }
+              }
+            }
+          ];
+        
+          const pipeline2 = [
+            { $match: { status: "paid" } },
+            {
+              $group: {
+                _id: null,
+                totalAmount: { $sum: "$price" }
+              }
+            }
+          ];
+        
+          const pipeline3 = [
+            {
+              $group: {
+                _id: null,
+                totalAmount: { $sum: "$price" }
+              }
+            }
+          ];
+        
+          const [pipeline1Result, pipeline2Result, pipeline3Result] = await Promise.all([
+            paymentCollection.aggregate(pipeline1).toArray(),
+            paymentCollection.aggregate(pipeline2).toArray(),
+            paymentCollection.aggregate(pipeline3).toArray()
+          ]);
+        
+          const pendingAmount = pipeline1Result.length > 0 ? pipeline1Result[0].totalAmount : 0;
+          const paidAmount = pipeline2Result.length > 0 ? pipeline2Result[0].totalAmount : 0;
+          const totalAmount = pipeline3Result.length > 0 ? pipeline3Result[0].totalAmount : 0;
+        
+          res.send({ totalAmount, paidAmount, pendingAmount });
+        });
 
         app.get("/seller-total-stats/:email",verifyToken, verifySeller, async (req, res)=>{
           const email = req.params.email;
@@ -396,8 +524,8 @@ async function run() {
 
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    // await client.db("admin").command({ ping: 1 });
+    // console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
