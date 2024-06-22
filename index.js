@@ -35,6 +35,7 @@ async function run() {
     const medicineCollection = client.db("mediConnectionDB").collection("medicine");
     const cartCollection = client.db("mediConnectionDB").collection("carts");
     const paymentCollection = client.db("mediConnectionDB").collection("payments");
+    const advertiseCollection = client.db("mediConnectionDB").collection("advertise");
 
      // jwt related api
      app.post('/jwt', async (req, res) => {
@@ -94,11 +95,25 @@ async function run() {
         res.send(result);
       });
 
-      app.get('/users', async (req, res) => {
+      app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
      
         const result = await userCollection.find().toArray();
         res.send(result);
       });
+
+      app.patch('/users', async (req, res)=>{
+        
+        const user = req.body;
+        console.log(user);
+        const query = {email: user.email}
+        const updatedDoc = {
+          $set:{
+            role: user.role
+          },
+        }
+        const result = await userCollection.updateOne(query, updatedDoc)
+        res.send(result)
+      })
 
       app.get('/users/seller/:email', verifyToken, async (req, res) => {
         const email = req.params.email;
@@ -114,6 +129,21 @@ async function run() {
           seller = user?.role === 'seller';
         }
         res.send({ seller });
+      })
+      app.get('/users/admin/:email', verifyToken, async (req, res) => {
+        const email = req.params.email;
+  
+        if (email !== req.decoded.email) {
+          return res.status(403).send({ message: 'forbidden access' })
+        }
+  
+        const query = { email: email };
+        const user = await userCollection.findOne(query);
+        let admin = false;
+        if (user) {
+          admin = user?.role === 'admin';
+        }
+        res.send({ admin });
       })
 
       // medicine related api
@@ -153,6 +183,19 @@ async function run() {
     res.send(result);
   })
 
+  // ask for advertise
+
+  app.post('/advertise', verifyToken, verifySeller, async (req, res) => {
+    const medicine = req.body;
+    const query = { _id: medicine._id }
+        const existingMedicine = await advertiseCollection.findOne(query);
+        if (existingMedicine) {
+          return res.send({ message: 'medicine already exists', insertedId: null })
+        }
+    const result = await advertiseCollection.insertOne(medicine);
+    res.send(result);
+  });
+
   // cart related api
      app.post('/carts', async (req, res) => {
           const cartItem = req.body;
@@ -190,7 +233,6 @@ async function run() {
         })
         app.patch('/myCart/:id', verifyToken, async (req, res)=>{
           const id = req.params.id;
-          console.log(id);
           const filter = {_id: new ObjectId(id)}
           const item = await cartCollection.findOne(filter);
           if (item.quantity <= 1) {
